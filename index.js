@@ -82,69 +82,17 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal Server Error' });
 });
 
-const DEFAULT_PORT = parseInt(process.env.PORT, 10) || 5000;
-const MAX_PORT_ATTEMPTS = 25; // try 5000..5024 if ports are busy
+const PORT = process.env.PORT || 5000;
 
-function startServer(port) {
-  return new Promise((resolve, reject) => {
-    const onListen = () => {
-      server.off('error', onError);
-      const actualPort = (server.address && server.address().port) ? server.address().port : port;
-      console.log(`Server running on port ${actualPort}`);
-      if (actualPort !== DEFAULT_PORT) {
-        console.warn(`⚠️ Port ${DEFAULT_PORT} was in use. Using port ${actualPort} instead. Update .env or free the port.`);
-      }
-      // reflect actual listening port in env for other tools/tests
-      process.env.PORT = String(actualPort);
-      resolve(actualPort);
-    };
-
-    const onError = (err) => {
-      server.off('listening', onListen);
-      reject(err);
-    };
-
-    server.once('listening', onListen);
-    server.once('error', onError);
-    server.listen(port, '0.0.0.0');
+// Connect to Database and Start Server
+connectDB().then(() => {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
   });
-}
-
-(async () => {
-  try {
-    await connectDB();
-  } catch (err) {
-    console.error('Database connection failed during startup', err);
-    process.exit(1);
-  }
-
-  let lastErr;
-  for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
-    const port = DEFAULT_PORT + attempt;
-    try {
-      await startServer(port);
-      // started successfully
-      return;
-    } catch (err) {
-      lastErr = err;
-      if (err.code !== 'EADDRINUSE') {
-        console.error('Server failed to start', err);
-        process.exit(1);
-      }
-      console.warn(`Port ${port} in use, trying ${port + 1}...`);
-    }
-  }
-
-  // last-resort: try ephemeral port 0 (OS assigns a free port)
-  try {
-    console.warn(`All ports ${DEFAULT_PORT}-${DEFAULT_PORT + MAX_PORT_ATTEMPTS - 1} busy — attempting ephemeral port...`);
-    const actual = await startServer(0);
-    console.log(`Started on ephemeral port ${actual}. If you need a fixed port, set PORT in your .env.`);
-  } catch (err) {
-    console.error(`Could not bind to any port from ${DEFAULT_PORT} to ${DEFAULT_PORT + MAX_PORT_ATTEMPTS - 1}, and ephemeral port failed.`, err);
-    process.exit(1);
-  }
-})();
+}).catch(err => {
+  console.error('Database connection failed:', err);
+  process.exit(1);
+});
 
 // Global/unhandled error handlers & graceful shutdown
 const _shutdown = (info) => {
