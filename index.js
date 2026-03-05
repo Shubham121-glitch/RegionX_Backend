@@ -35,7 +35,10 @@ if (!clerkPubKey || !clerkSecretKey) {
 // Socket.io configuration
 const io = socketIo(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: [
+      "http://localhost:5173",
+      "https://regionx-official.vercel.app"
+    ],
     credentials: true,
   },
   transports: ['websocket', 'polling'],
@@ -43,25 +46,42 @@ const io = socketIo(server, {
 attachChatSocket(io);
 
 // CORS configuration
+// CORS configuration (Production Safe)
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
   'http://localhost:5173',
-  'http://localhost:3000'
-].filter(Boolean);
+  'http://localhost:3000',
+  'https://regionx-official.vercel.app'
+];
 
 app.use(cors({
   origin: function (origin, callback) {
+
+    // allow requests without origin (mobile apps, curl, postman)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      return callback(null, false);
+
+    // allow localhost
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     }
-    return callback(null, true);
+
+    // allow ALL vercel preview deployments
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+
+    console.log("Blocked by CORS:", origin);
+    return callback(new Error('Not allowed by CORS'));
   },
+
   credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ]
 }));
 
 // Explicitly handle OPTIONS preflight
