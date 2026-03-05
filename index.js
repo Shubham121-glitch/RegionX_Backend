@@ -65,7 +65,11 @@ app.use(cors({
 }));
 
 // Explicitly handle OPTIONS preflight
-app.options('/', cors());
+// The line below only handles OPTIONS for the root path '/'.
+// If you need to handle pre-flight for *all* routes, use:
+//   app.options('*', cors());
+// If you want to keep it scoped to '/', leave as-is.
+// app.options('/*', cors());
 
 app.use(express.json());
 
