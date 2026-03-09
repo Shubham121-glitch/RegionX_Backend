@@ -37,7 +37,8 @@ const io = socketIo(server, {
   cors: {
     origin: [
       "http://localhost:5173",
-      "https://regionx-official.vercel.app"
+      "https://regionx-official.vercel.app",
+      "https://regionx-backend.vercel.app"
     ],
     credentials: true,
   },
@@ -46,19 +47,11 @@ const io = socketIo(server, {
 attachChatSocket(io);
 
 // CORS configuration
-// CORS configuration (Production Safe)
 const allowedOrigins = [
   'http://localhost:5173',
-  'http://localhost:3000',
-  'https://regionx-official.vercel.app'
+  'https://regionx-official.vercel.app',
+  'https://regionx-backend.vercel.app'
 ];
-
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://regionx-official.vercel.app");
-  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
-  next();
-});
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -91,12 +84,8 @@ app.use(cors({
   ]
 }));
 
-// Explicitly handle OPTIONS preflight
-// The line below only handles OPTIONS for the root path '/'.
-// If you need to handle pre-flight for *all* routes, use:
-//   app.options('*', cors());
-// If you want to keep it scoped to '/', leave as-is.
-// app.options('/*', cors());
+// Explicitly handle OPTIONS preflight for all routes
+app.options('*', cors());
 
 app.use(express.json());
 
