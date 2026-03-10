@@ -48,10 +48,25 @@ attachChatSocket(io);
 
 // CORS configuration
 const allowedOrigins = [
-  'http://localhost:5173',
-  'https://regionx-official.vercel.app',
-  'https://regionx-backend.vercel.app'
+  "http://localhost:5173",
+  "https://regionx-official.vercel.app"
 ];
+
+app.use(cors({
+  origin: (origin, callback) => {
+
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
+      return callback(null, true);
+    }
+
+    console.log("Blocked by CORS:", origin);
+    return callback(null, false);
+  },
+
+  credentials: true
+}));
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -65,7 +80,7 @@ app.use(cors({
     }
 
     // allow ALL vercel preview deployments
-    if (origin.endsWith('.vercel.app')) {
+    if (origin && origin.endsWith('.vercel.app')) {
       return callback(null, true);
     }
 
@@ -85,7 +100,10 @@ app.use(cors({
 }));
 
 // Explicitly handle OPTIONS preflight for all routes
-app.options('*', cors());
+app.options('*', cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
 
 app.use(express.json());
 
@@ -117,8 +135,16 @@ app.use((req, res, next) => {
 
 // Express error handler
 app.use((err, req, res, next) => {
+
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ message: "CORS blocked this request" });
+  }
+
   console.error('[Express error]', err);
-  res.status(err.status || 500).json({ message: err.message || 'Internal Server Error' });
+
+  res.status(err.status || 500).json({
+    message: err.message || 'Internal Server Error'
+  });
 });
 
 const PORT = process.env.PORT || 5000;
