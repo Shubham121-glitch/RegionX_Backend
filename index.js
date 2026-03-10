@@ -37,8 +37,7 @@ const io = socketIo(server, {
   cors: {
     origin: [
       "http://localhost:5173",
-      "https://regionx-official.vercel.app",
-      "https://regionx-backend.vercel.app"
+      "https://regionx-official.vercel.app"
     ],
     credentials: true,
   },
@@ -52,58 +51,24 @@ const allowedOrigins = [
   "https://regionx-official.vercel.app"
 ];
 
-app.use(cors({
-  origin: (origin, callback) => {
+const corsOrigin = (origin, callback) => {
+  if (!origin) return callback(null, true);
+  if (allowedOrigins.includes(origin)) return callback(null, true);
+  if (origin && origin.endsWith('.vercel.app')) return callback(null, true);
+  return callback(new Error('Not allowed by CORS'));
+};
 
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
-      return callback(null, true);
-    }
-
-    console.log("Blocked by CORS:", origin);
-    return callback(null, false);
-  },
-
-  credentials: true
-}));
-
-app.use(cors({
-  origin: function (origin, callback) {
-
-    // allow requests without origin (mobile apps, curl, postman)
-    if (!origin) return callback(null, true);
-
-    // allow localhost
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    // allow ALL vercel preview deployments
-    if (origin && origin.endsWith('.vercel.app')) {
-      return callback(null, true);
-    }
-
-    console.log("Blocked by CORS:", origin);
-    return callback(new Error('Not allowed by CORS'));
-  },
-
+const corsOptions = {
+  origin: corsOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ]
-}));
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+};
+
+app.use(cors(corsOptions));
 
 // Explicitly handle OPTIONS preflight for all routes
-app.options('*', cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
+app.options(/.*/, cors(corsOptions));
 
 app.use(express.json());
 
