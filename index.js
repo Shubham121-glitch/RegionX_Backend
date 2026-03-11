@@ -5,6 +5,7 @@ const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
 const connectDB = require('./config/db.js');
+const { corsOptions, allowedOrigins } = require('./config/cors.js');
 const userRoutes = require('./routes/userRoutes.js');
 const regionRoutes = require('./routes/regionRoutes.js');
 const reviewRoutes = require('./routes/reviewRoutes.js');
@@ -35,39 +36,15 @@ if (!clerkPubKey || !clerkSecretKey) {
 // Socket.io configuration
 const io = socketIo(server, {
   cors: {
-    origin: [
-      "http://localhost:5173",
-      "https://regionx-official.vercel.app"
-    ],
-    credentials: true,
+    origin: allowedOrigins,
+    credentials: true
   },
-  transports: ['websocket', 'polling'],
+  transports: ['websocket', 'polling']
 });
 attachChatSocket(io);
 
-// CORS configuration
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://regionx-official.vercel.app"
-];
-
-const corsOrigin = (origin, callback) => {
-  if (!origin) return callback(null, true);
-  if (allowedOrigins.includes(origin)) return callback(null, true);
-  if (origin && origin.endsWith('.vercel.app')) return callback(null, true);
-  return callback(new Error('Not allowed by CORS'));
-};
-
-const corsOptions = {
-  origin: corsOrigin,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
-};
-
 app.use(cors(corsOptions));
 
-// Explicitly handle OPTIONS preflight for all routes
 app.options(/.*/, cors(corsOptions));
 
 app.use(express.json());
