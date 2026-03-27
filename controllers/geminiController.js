@@ -79,6 +79,59 @@ const healthCheck = async (req, res) => {
   }
 };
 
+const autofillRegionHandler = async (req, res) => {
+  try {
+    const { regionName } = req.body;
+
+    if (!regionName || typeof regionName !== 'string' || regionName.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'regionName is required'
+      });
+    }
+
+    const prompt = `You are a travel expert. Generate comprehensive information for a travel region named "${regionName.trim()}". 
+    Respond ONLY with a JSON object in the following format:
+    {
+      "shortDescription": "A 1-2 sentence catchy description",
+      "detailedDescription": "A detailed 2-3 paragraph description",
+      "history": "Historical background of the region",
+      "culturalValues": "Cultural values and significance",
+      "traditions": "Local traditions and customs",
+      "placesToVisit": [
+        { "name": "Place Name 1", "description": "Short description of place 1" },
+        { "name": "Place Name 2", "description": "Short description of place 2" },
+        { "name": "Place Name 3", "description": "Short description of place 3" }
+      ]
+    }`;
+
+    // We use generateContent or a direct call. Let's use the service's openai directly for a clean prompt if needed, 
+    // or just use generateContent with a system-like message.
+    // Actually, openRouterService.openai is public.
+    
+    const response = await openRouterService.openai.chat.completions.create({
+      model: openRouterService.model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      response_format: { type: "json_object" }
+    });
+
+    let text = response.choices[0]?.message?.content?.trim() || '';
+    const data = JSON.parse(text);
+
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    console.error('Autofill controller error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate region data'
+    });
+  }
+};
+
 const clearHistory = async (req, res) => {
   try {
     const { userId } = req.body;
@@ -108,5 +161,6 @@ const clearHistory = async (req, res) => {
 module.exports = {
   chatHandler,
   healthCheck,
-  clearHistory
+  clearHistory,
+  autofillRegionHandler
 };

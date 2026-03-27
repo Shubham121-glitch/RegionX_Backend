@@ -35,17 +35,19 @@ router.post('/', upload.fields([
       return res.status(400).json({ message: 'Region with this slug already exists' });
     }
 
-    // Process uploaded files
+    // Process uploaded files to Base64 for database storage
     const files = req.files;
     
+    const toBase64 = (file) => file ? `data:${file.mimetype};base64,${file.buffer.toString('base64')}` : '';
+
     // Thumbnail
-    const thumbnail = files.thumbnail ? `/uploads/${files.thumbnail[0].filename}` : '';
+    const thumbnail = files.thumbnail ? toBase64(files.thumbnail[0]) : '';
     
     // Images
-    const images = files.images ? files.images.map(file => `/uploads/${file.filename}`) : [];
+    const images = files.images ? files.images.map(toBase64) : [];
     
-    // Videos
-    const videos = files.videos ? files.videos.map(file => `/uploads/${file.filename}`) : [];
+    // Videos - Convert to Base64 as requested (Warning: Large videos will fail due to 16MB MongoDB limit)
+    const videos = files.videos ? files.videos.map(toBase64) : [];
     
     // Parse places to visit
     let parsedPlaces = [];
@@ -56,7 +58,7 @@ router.post('/', upload.fields([
         if (files.placeImages) {
           parsedPlaces = parsedPlaces.map((place, index) => ({
             ...place,
-            image: files.placeImages[index] ? `/uploads/${files.placeImages[index].filename}` : ''
+            image: files.placeImages[index] ? toBase64(files.placeImages[index]) : (place.image || '')
           }));
         }
       } catch (e) {

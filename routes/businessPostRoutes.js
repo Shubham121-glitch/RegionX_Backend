@@ -19,14 +19,15 @@ router.post('/', ClerkExpressRequireAuth(), upload.fields([{ name: 'image', maxC
       location: req.body.location
     };
     
-    // Add file paths if uploaded
-    if (req.files) {
-      if (req.files.image) {
-        postData.image = `/uploads/${req.files.image[0].filename}`;
-      }
-      if (req.files.video) {
-        postData.video = `/uploads/${req.files.video[0].filename}`;
-      }
+    // Process uploaded files to Base64
+    const files = req.files || {};
+    const toBase64 = (file) => file ? `data:${file.mimetype};base64,${file.buffer.toString('base64')}` : '';
+
+    if (files.image) {
+      postData.image = toBase64(files.image[0]);
+    }
+    if (files.video) {
+      postData.video = toBase64(files.video[0]);
     }
     
     // Find user's business

@@ -1,8 +1,11 @@
 const express = require('express');
-const { chatHandler, healthCheck, clearHistory } = require('../controllers/geminiController');
+const { chatHandler, healthCheck, clearHistory, autofillRegionHandler } = require('../controllers/geminiController');
 const rateLimit = require('../middleware/rateLimit');
 
 const router = express.Router();
+
+// Autofill region data
+router.post('/autofill-region', autofillRegionHandler);
 
 // Chat endpoint with rate limiting
 router.post('/chat', rateLimit, chatHandler);

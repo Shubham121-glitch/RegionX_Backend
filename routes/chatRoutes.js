@@ -9,6 +9,7 @@ const router = express.Router();
 const Chat = require('../models/chatModel.js');
 const Message = require('../models/messageModel.js');
 const Business = require('../models/businessModel.js');
+const upload = require('../config/multer.js');
 
 // ---- List & unread (must be before /:businessId) ----
 
@@ -19,23 +20,55 @@ router.get('/list/:userId', async (req, res) => {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const skip = (page - 1) * limit;
 
+    // Find businesses owned by this user
+    const userBusinesses = await Business.find({ userId }).select('_id').lean();
+    const businessIds = userBusinesses.map((b) => b._id);
+
     const [totalChats, chats] = await Promise.all([
-      Chat.countDocuments({ userId }),
-      Chat.find({ userId }).sort({ lastMessageTime: -1 }).skip(skip).limit(limit).lean(),
+      Chat.countDocuments({
+        $or: [{ userId }, { businessId: { $in: businessIds } }],
+      }),
+      Chat.find({
+        $or: [{ userId }, { businessId: { $in: businessIds } }],
+      })
+        .sort({ lastMessageTime: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
     ]);
 
     const enriched = await Promise.all(
       chats.map(async (c) => {
-        const unreadCount = await Message.countDocuments({
-          chatId: c._id,
-          senderType: 'business',
-          seen: false,
-        });
+        const isOwner = businessIds.some((bId) => String(bId) === String(c.businessId));
+        
+        let unreadCount;
+        if (isOwner) {
+          unreadCount = await Message.countDocuments({
+            chatId: c._id,
+            senderType: 'user',
+            seen: false,
+          });
+        } else {
+          unreadCount = await Message.countDocuments({
+            chatId: c._id,
+            senderType: 'business',
+            seen: false,
+          });
+        }
+
         const business = await Business.findById(c.businessId).lean();
         const img = business?.profileImage || '';
+        
+        // If owner, we might want to show the customer's name, 
+        // but since we don't have it in the Chat model, we'll prefix for now
+        // or just use business name if that's what's expected.
+        // Actually, for a business owner, they should see who the user is.
+        // We can fetch the user from Clerk if needed, but let's keep it simple first.
+        
         return {
           ...c,
           unreadCount,
+          isOwner,
           businessLogo: img,
           businessImage: img,
           businessCategory: business?.category,
@@ -77,6 +110,62 @@ router.get('/unread/:userId', async (req, res) => {
 
 // ---- Get or create chat + messages ----
 
+// ---- Get chat by specific Chat ID ----
+
+router.get('/id/:chatId', async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { userId } = req.query;
+
+    const chat = await Chat.findById(chatId).lean();
+    if (!chat) {
+      return res.status(404).json({ success: false, message: 'Chat not found' });
+    }
+
+    // Verify participant
+    const isUser = chat.userId === userId;
+    const business = await Business.findById(chat.businessId).lean();
+    const isOwner = business && business.userId === userId;
+
+    if (!isUser && !isOwner) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const messages = await Message.find({ chatId: chat._id })
+      .sort({ createdAt: 1 })
+      .limit(50)
+      .lean();
+
+    // Mark seen for the OTHER party
+    if (isUser) {
+      await Message.updateMany(
+        { chatId: chat._id, senderType: 'business', seen: false },
+        { seen: true, seenAt: new Date() }
+      );
+    } else {
+      await Message.updateMany(
+        { chatId: chat._id, senderType: 'user', seen: false },
+        { seen: true, seenAt: new Date() }
+      );
+    }
+
+    res.json({
+      success: true,
+      chat,
+      messages: messages || [],
+      business: business ? {
+        _id: business._id,
+        businessTitle: business.businessTitle,
+        profileImage: business.profileImage,
+        category: business.category,
+      } : null,
+    });
+  } catch (err) {
+    console.error('GET /chat/id/:chatId error:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch chat', error: err.message });
+  }
+});
+
 router.get('/:businessId', async (req, res) => {
   try {
     const businessId = req.params.businessId;
@@ -85,14 +174,29 @@ router.get('/:businessId', async (req, res) => {
     if (!userId || !businessId) {
       return res.status(400).json({ success: false, message: 'UserId and businessId required' });
     }
-    if (!mongoose.Types.ObjectId.isValid(businessId)) {
-      return res.status(400).json({ success: false, message: 'Invalid businessId format' });
+    
+    // Check if the user is a business owner of THIS business
+    const business = await Business.findById(businessId).lean();
+    const isOwner = business && business.userId === userId;
+
+    let chat;
+    if (isOwner) {
+       // If owner, we need the customer's ID to find the chat. 
+       // If no customer ID in query, this route is ambiguous.
+       // For now, we'll try to find the most recent chat for this business if no userId provided,
+       // but ideally owners should use /chat/id/:chatId
+       const customerId = req.query.customerId;
+       if (customerId) {
+         chat = await Chat.findOne({ userId: customerId, businessId });
+       } else {
+         chat = await Chat.findOne({ businessId }).sort({ lastMessageTime: -1 });
+       }
+    } else {
+       // Normal customer path
+       chat = await Chat.findOne({ userId, businessId });
     }
 
-    let chat = await Chat.findOne({ userId, businessId });
-
-    if (!chat) {
-      const business = await Business.findById(businessId);
+    if (!chat && !isOwner) {
       if (!business) {
         return res.status(404).json({ success: false, message: 'Business not found' });
       }
@@ -104,33 +208,25 @@ router.get('/:businessId', async (req, res) => {
       });
     }
 
+    if (!chat) {
+       return res.status(404).json({ success: false, message: 'Chat not found' });
+    }
+
     const messages = await Message.find({ chatId: chat._id })
       .sort({ createdAt: 1 })
       .limit(50)
       .lean();
 
-    await Message.updateMany(
-      { chatId: chat._id, senderType: 'business', seen: false },
-      { seen: true, seenAt: new Date() }
-    );
-    chat.unreadCount = 0;
-    await chat.save();
-
-    const business = await Business.findById(businessId).lean();
-
     res.json({
       success: true,
       chat,
       messages: messages || [],
-      messageCount: (messages || []).length,
-      business: business
-        ? {
+      business: business ? {
             _id: business._id,
             businessTitle: business.businessTitle,
             profileImage: business.profileImage,
             category: business.category,
-          }
-        : null,
+          } : null,
     });
   } catch (err) {
     console.error('GET /chat/:businessId error:', err);
@@ -140,9 +236,12 @@ router.get('/:businessId', async (req, res) => {
 
 // ---- Send message ----
 
-router.post('/send', async (req, res) => {
+router.post('/send', upload.fields([{ name: 'image', maxCount: 1 }]), async (req, res) => {
   try {
     const { chatId, senderId, senderType, receiverId, message: text } = req.body;
+    const files = req.files || {};
+    const toBase64 = (file) => file ? `data:${file.mimetype};base64,${file.buffer.toString('base64')}` : '';
+    const mediaUrl = files.image ? toBase64(files.image[0]) : '';
 
     if (!chatId || !senderId || !senderType || (text !== undefined && text !== null && String(text).trim() === '')) {
       return res.status(400).json({
@@ -159,7 +258,9 @@ router.post('/send', async (req, res) => {
       senderId,
       senderType,
       receiverId: receiverId || undefined,
-      message: String(text).trim(),
+      message: (text || '').trim(),
+      mediaUrl,
+      mediaType: mediaUrl ? 'image' : undefined,
       seen: false,
     });
 

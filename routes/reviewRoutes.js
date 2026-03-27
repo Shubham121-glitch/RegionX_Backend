@@ -44,10 +44,12 @@ router.post('/', upload.fields([
       return res.status(400).json({ message: 'You have already reviewed this region' });
     }
     
-    // Process uploaded files
-    const files = req.files;
-    const image = files.image ? `/uploads/${files.image[0].filename}` : '';
-    const video = files.video ? `/uploads/${files.video[0].filename}` : '';
+    // Process uploaded files to Base64 (Using memory storage)
+    const files = req.files || {};
+    const toBase64 = (file) => file ? `data:${file.mimetype};base64,${file.buffer.toString('base64')}` : '';
+    
+    const image = files.image ? toBase64(files.image[0]) : '';
+    const video = files.video ? toBase64(files.video[0]) : '';
     
     // Create new review
     const newReview = new Review({
@@ -126,13 +128,15 @@ router.put('/:id', upload.fields([
       return res.status(400).json({ message: 'Rating must be between 1 and 5' });
     }
     
-    // Process uploaded files
-    const files = req.files;
+    // Process uploaded files to Base64
+    const files = req.files || {};
+    const toBase64 = (file) => file ? `data:${file.mimetype};base64,${file.buffer.toString('base64')}` : '';
+
     if (files.image) {
-      review.image = `/uploads/${files.image[0].filename}`;
+      review.image = toBase64(files.image[0]);
     }
     if (files.video) {
-      review.video = `/uploads/${files.video[0].filename}`;
+      review.video = toBase64(files.video[0]);
     }
     
     // Update fields

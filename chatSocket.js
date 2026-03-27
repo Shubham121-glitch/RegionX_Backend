@@ -42,7 +42,7 @@ function attachChatSocket(io) {
       const { senderId, senderType, message } = data || {};
       if (!chatId || !senderId || !message) return;
 
-      io.to(chatId).emit('receive_message', {
+      socket.to(chatId).emit('receive_message', {
         chatId,
         senderId,
         senderType: senderType || 'user',

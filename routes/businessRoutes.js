@@ -27,15 +27,19 @@ router.post('/', ClerkExpressRequireAuth(), upload.fields([
       licenseNumber: req.body.licenseNumber || ''
     };
     
+    // Process uploaded files to Base64
+    const files = req.files || {};
+    const toBase64 = (file) => file ? `data:${file.mimetype};base64,${file.buffer.toString('base64')}` : '';
+
     // Add license document path if uploaded
-    if (req.files.licenseDocument) {
-      businessData.licenseDocument = `/uploads/${req.files.licenseDocument[0].filename}`;
+    if (files.licenseDocument) {
+      businessData.licenseDocument = toBase64(files.licenseDocument[0]);
     }
     
     // Add profile image path if uploaded
-    if (req.files.profileImage) {
-      businessData.profileImage = `/uploads/${req.files.profileImage[0].filename}`;
-      console.log('Profile image saved:', businessData.profileImage);
+    if (files.profileImage) {
+      businessData.profileImage = toBase64(files.profileImage[0]);
+      console.log('Profile image saved to DB as Base64');
     } else {
       console.log('No profile image received');
     }

@@ -1,5 +1,5 @@
+require('dotenv').config();
 const express = require('express');
-const dotenv = require('dotenv');
 const cors = require('cors');
 const path = require('path');
 const http = require('http');
@@ -22,7 +22,7 @@ const { clerkMiddleware } = require('@clerk/express');
 const app = express();
 
 const server = http.createServer(app);
-dotenv.config();
+
 
 // Clerk configuration check
 const clerkPubKey = process.env.CLERK_PUBLISHABLE_KEY;
@@ -52,8 +52,7 @@ app.use(express.json());
 // Apply Clerk middleware globally to populate req.auth
 app.use(clerkMiddleware());
 
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// No longer using filesystem uploads - images/videos are stored in DB as Base64
 
 // Routes
 app.use('/api/users', userRoutes);
